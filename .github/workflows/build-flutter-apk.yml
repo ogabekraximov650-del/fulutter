@@ -1,0 +1,69 @@
+name: 📱 Build Flutter APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build-flutter-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📱 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 🔧 Generate android folder (agar yo'q bo'lsa)
+        run: |
+          if [ ! -f "android/app/build.gradle" ]; then
+            flutter create --platforms=android --org uz.fulutter .
+          fi
+
+      - name: 🌐 INTERNET ruxsatini qo'shish (agar yo'q bo'lsa)
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
+            sed -i '/<manifest /a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+            echo "✅ INTERNET ruxsati qo'shildi"
+          else
+            echo "✅ INTERNET ruxsati allaqachon bor"
+          fi
+          echo "── Manifest tekshirish: ──"
+          grep "uses-permission" "$MANIFEST" || echo "⚠️ Hech qanday ruxsat topilmadi!"
+
+      - name: 🩹 Kotlin va compileSdk versiyalarini eng yangisiga moslash
+        run: |
+          if [ -f "android/build.gradle" ]; then
+            sed -i "s/ext.kotlin_version = '[0-9.]*'/ext.kotlin_version = '1.9.24'/" android/build.gradle || true
+          fi
+          if [ -f "android/app/build.gradle" ]; then
+            sed -i "s/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/" android/app/build.gradle || true
+            sed -i "s/compileSdk = flutter.compileSdkVersion/compileSdk = 35/" android/app/build.gradle || true
+          fi
+          echo "✅ Gradle sozlamalari yangilandi"
+
+      - name: 📚 Get dependencies
+        run: flutter pub get
+
+      - name: 🔨 Build APK (Release)
+        run: flutter build apk --release
+
+      - name: 📦 Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fulutter-app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: ✅ Done
+        run: echo "🎉 APK tayyor! Artifacts bo'limidan yuklab ol."
